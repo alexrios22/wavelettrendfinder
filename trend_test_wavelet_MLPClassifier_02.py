@@ -81,11 +81,14 @@ features = result_df[['High_pct_change',
                       'candle_high2low2close']]
 labels = result_df['Trend'].map({'up': 1, 'down': -1, 'sideways': 0})
 
-scaler = StandardScaler()
-features_scaled = scaler.fit_transform(features)
 
-X_train, X_test, y_train, y_test = train_test_split(features_scaled, labels,
+X_train, X_test, y_train, y_test = train_test_split(features, labels,
                                                     test_size=0.4, shuffle=False)
+# Scale the training and test sets separately
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
 mlp_model = MLPClassifier(hidden_layer_sizes=(100, 100),
                           activation='relu',
                           solver='sgd',
@@ -94,7 +97,7 @@ mlp_model = MLPClassifier(hidden_layer_sizes=(100, 100),
                           max_iter=200,
                           warm_start=True)
 mlp_model.out_activation_ = 'softmax'
-mlp_model.fit(X_train, y_train)
+mlp_model.fit(X_train_scaled, y_train)
 
 # Plot the convergence of the neural network
 plt.figure(figsize=(10, 6))
@@ -106,7 +109,7 @@ plt.legend()
 plt.grid()
 plt.show()
 
-y_pred = mlp_model.predict(X_test)
+y_pred = mlp_model.predict(X_test_scaled)
 
 # Print the classification report
 print(classification_report(y_test, y_pred, zero_division=0))
