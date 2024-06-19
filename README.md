@@ -196,6 +196,7 @@ apds = [mpf.make_addplot(result_df['approx'], color='blue', panel=0, ylabel='App
 mc = mpf.make_marketcolors(up='g', down='r', inherit=True)
 s = mpf.make_mpf_style(marketcolors=mc)
 mpf.plot(result_df, type='candle', addplot=apds, style=s, title='Candlestick Chart with Wavelet and MLP Predicted Trends', volume=False)
+```
 
 ## License
 
