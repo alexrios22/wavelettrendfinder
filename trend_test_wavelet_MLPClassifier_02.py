@@ -15,8 +15,6 @@ class TrendIdentifier:
         self.wavelet = wavelet
 
     def identify_trend(self, df):
-        df['Trend'] = 'sideways'
-        df['Trend'] = df['Trend'].astype(object)
 
         data = df['Close'].values
         if len(data) % 2 != 0:  # Ensuring even length for DWT
@@ -25,26 +23,25 @@ class TrendIdentifier:
         cA, cD = pywt.dwt(data, self.wavelet, 'smooth')
         approx = pywt.idwt(cA, np.zeros_like(cD), self.wavelet)
 
-        # Ensure approx length matches df
-        approx = approx[:len(df)]
-        df['approx'] = approx
-
-        # Improved trend identification
-        df['Trend'] = np.where(
-            (df['approx'] > df['approx'].shift(1)) &
-            (df['approx'] > df['approx'].shift(2)) &
-            (df['approx'] > df['approx'].shift(3)),
+        # Convert the numpy array 'approx' to a pandas Series
+        approx_series = pd.Series(approx[:len(df)])  # Ensuring it matches the length of df
+        
+        # Improved trend identification using pandas Series methods
+        kappa = np.where(
+            (approx_series > approx_series.shift(1)) &
+            (approx_series > approx_series.shift(2)) &
+            (approx_series > approx_series.shift(3)),
             'up',
             np.where(
-                (df['approx'] < df['approx'].shift(1)) &
-                (df['approx'] < df['approx'].shift(2)) &
-                (df['approx'] < df['approx'].shift(3)),
+                (approx_series < approx_series.shift(1)) &
+                (approx_series < approx_series.shift(2)) &
+                (approx_series < approx_series.shift(3)),
                 'down',
                 'sideways'
             )
         )
 
-        return df
+        return kappa[-1], approx[-1]
 
 def fetch_historical_data(symbol, interval='1d', period='1y'):
     df = yf.download(symbol, period=period, interval=interval)
@@ -65,11 +62,32 @@ def add_percentage_change_features(df, window=3, shift_days=2):
     df.dropna(inplace=True)
     return df
 
+# Function to manually apply a rolling operation with a DataFrame window
+def apply_custom_rolling(df, window_size, func):
+    results1 = []
+    results2 = []
+    # Loop through the DataFrame creating windows and applying the custom function
+    for start in range(len(df) - window_size + 1):
+        end = start + window_size
+        window = df.iloc[start:end]
+        result1, result2 = func(window)
+        results1.append(result1)
+        results2.append(result2)
+    
+    # Append NaNs for the indices that don't complete a window
+    results1 = [None] * (window_size - 1) + results1
+    results2 = [None] * (window_size - 1) + results2
+    
+    return results1, results2
+
 df = fetch_historical_data("AAPL", "1d", "5y")
 trend_identifier = TrendIdentifier(wavelet='db24')
-result_df = trend_identifier.identify_trend(df)
+rolling_window = 128
+df['Trend'], df['approx'] = apply_custom_rolling(df = df,
+                                   window_size = rolling_window, 
+                                   func = trend_identifier.identify_trend)
 
-result_df = add_percentage_change_features(result_df, window=1, shift_days=1)
+result_df = add_percentage_change_features(df, window=1, shift_days=1)
 
 features = result_df[['High_pct_change',
                       'Low_pct_change',
@@ -137,7 +155,7 @@ result_df['MLP_Trend'] = mlp_model.predict(scaler.transform(result_df[['High_pct
                                                                        'candle_low2oc',
                                                                        'candle_high2low2close']].fillna(0)))
 
-crp = 0.1
+crp = 0.01
 arrows_up = np.where(result_df['MLP_Trend'] == 1, result_df['High'] * (1+2*crp), np.nan)
 arrows_down = np.where(result_df['MLP_Trend'] == -1, result_df['Low'] * (1-2*crp), np.nan)
 
